@@ -1773,9 +1773,9 @@ def render_main_market_dashboard():
     st.subheader("📈 Advanced Candlestick Chart")
     tv_symbol = f"BINANCE:{symbol}"
     components.html(f"""
-    <div id="tv-wrap" class="tradingview-widget-container" style="position:relative;height:620px;width:100%;background:#0F172A;">
+    <div id="tv-wrap" class="tradingview-widget-container" style="position:relative;height:100vh;min-height:620px;width:100%;background:#0F172A;">
       <button onclick="var el=document.getElementById('tv-wrap');if(!document.fullscreenElement){{el.requestFullscreen();}}else{{document.exitFullscreen();}}" style="position:absolute;top:8px;right:48px;z-index:99;background:#1E293B;color:#E2E8F0;border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;">⛶ Fullscreen</button>
-      <div id="tradingview_pro_chart" style="height:620px;width:100%;"></div>
+      <div id="tradingview_pro_chart" style="height:100%;width:100%;"></div>
       <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
       <script type="text/javascript">
       new TradingView.widget({{
