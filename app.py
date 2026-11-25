@@ -1771,12 +1771,11 @@ def render_main_market_dashboard():
     # BINANCE OHLCV + TRADINGVIEW-STYLE LIGHTWEIGHT CHART
     # -----------------------------------------------------
     st.subheader("📈 Advanced Candlestick Chart")
-    _size_choice = st.radio("Chart Size", ["Small", "Medium", "Large"], index=1, horizontal=True, key="tv_chart_size")
-    _chart_h = {"Small": 420, "Medium": 620, "Large": 850}[_size_choice]
     tv_symbol = f"BINANCE:{symbol}"
     components.html(f"""
-    <div class="tradingview-widget-container" style="height:{_chart_h}px;width:100%;">
-      <div id="tradingview_pro_chart" style="height:{_chart_h}px;width:100%;"></div>
+    <div id="tv-wrap" class="tradingview-widget-container" style="position:relative;height:620px;width:100%;background:#0F172A;">
+      <button onclick="var el=document.getElementById('tv-wrap');if(!document.fullscreenElement){el.requestFullscreen();}else{document.exitFullscreen();}" style="position:absolute;top:8px;right:48px;z-index:99;background:#1E293B;color:#E2E8F0;border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;">⛶ Fullscreen</button>
+      <div id="tradingview_pro_chart" style="height:620px;width:100%;"></div>
       <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
       <script type="text/javascript">
       new TradingView.widget({{
@@ -1796,7 +1795,7 @@ def render_main_market_dashboard():
       }});
       </script>
     </div>
-    """, height=_chart_h + 15)
+    """, height=635)
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("🌐 Global Crypto Benchmark Overview")
     overview_coins = ["BTCUSDT", "ETHUSDT", "BNBUSDT"]
