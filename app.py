@@ -1771,6 +1771,8 @@ def render_main_market_dashboard():
     # BINANCE OHLCV + TRADINGVIEW-STYLE LIGHTWEIGHT CHART
     # -----------------------------------------------------
     st.subheader("📈 Advanced Candlestick Chart")
+    _size_choice = st.radio("Chart Size", ["Small", "Medium", "Large"], index=1, horizontal=True, key="tv_chart_size")
+    _chart_h = {"Small": 420, "Medium": 620, "Large": 850}[_size_choice]
     tv_symbol = f"BINANCE:{symbol}"
     components.html(f"""
     <div class="tradingview-widget-container" style="height:{_chart_h}px;width:100%;">
