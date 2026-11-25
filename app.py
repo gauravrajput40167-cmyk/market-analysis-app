@@ -1362,6 +1362,11 @@ if current_role != "admin" and not is_sub_active:
     pending_order = st.session_state.get("pending_rzp_order")
     if pending_order and pending_order.get("order_id"):
         components.html(f"""
+        <div style="display:flex;justify-content:center;padding:8px 0;">
+          <button id="rzp-pay-btn" style="background:linear-gradient(135deg,#10B981,#059669);color:#fff;border:none;border-radius:10px;padding:14px 28px;font-size:16px;font-weight:700;cursor:pointer;font-family:sans-serif;box-shadow:0 4px 15px rgba(16,185,129,0.4);">
+            🔒 Click Here to Open Razorpay (₹{pending_order['amount_rupees']})
+          </button>
+        </div>
         <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
         <script>
         var options = {{
@@ -1381,9 +1386,12 @@ if current_role != "admin" and not is_sub_active:
             "theme": {{ "color": "#F59E0B" }}
         }};
         var rzp1 = new Razorpay(options);
-        rzp1.open();
+        document.getElementById("rzp-pay-btn").onclick = function(e) {{
+            rzp1.open();
+            e.preventDefault();
+        }};
         </script>
-        """, height=0)
+        """, height=80)
     st.stop()
 
 # =========================================================
