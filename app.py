@@ -59,7 +59,16 @@ from auth import (
 from data import get_market_data, get_24h_stats
 from indicators import calculate_average, calculate_indicators
 from prediction import get_signal, get_demo_prediction
-# Online payment gateway intentionally disabled in this educational build.
+import account_center
+import finance
+from payment_gateway import (
+    verify_checkout_payment,
+    mark_checkout_payment_failed,
+    mark_checkout_payment_cancelled,
+    mark_checkout_payment_pending,
+)
+LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo.png")
+PAGE_ICON = LOGO_PATH if os.path.exists(LOGO_PATH) else "📈"
 # =========================================================
 # CENTRAL ACTIVITY TRACKING WRAPPER
 # =========================================================
@@ -160,7 +169,7 @@ _bootstrap_admin_from_secrets()
 # =========================================================
 st.set_page_config(
     page_title="Market Analysis App | Quantitative Crypto Intelligence",
-    page_icon="📈",
+    page_icon=PAGE_ICON,
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -576,15 +585,12 @@ if "selected_market" not in st.session_state:
 if not st.session_state.logged_in:
     col_logo, col_stat = st.columns([2.5, 1])
     with col_logo:
+        if os.path.exists(LOGO_PATH):
+            st.image(LOGO_PATH, width=92)
         st.markdown("""
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 0.5rem;">
-            <div style="background: linear-gradient(135deg, #F59E0B, #10B981); width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);">
-                📈
-            </div>
-            <div>
-                <h1 style="margin: 0; font-size: 2rem;">Market Analysis App</h1>
-                <p style="color: #94A3B8; font-size: 0.95rem;">Institutional Market Intelligence & Quantitative Analytics</p>
-            </div>
+        <div style="margin-bottom: 0.5rem;">
+            <h1 style="margin: 0; font-size: 2rem;">Market Analysis App</h1>
+            <p style="color: #94A3B8; font-size: 0.95rem;">Institutional Market Intelligence & Quantitative Analytics</p>
         </div>
         """, unsafe_allow_html=True)
     with col_stat:
@@ -599,9 +605,9 @@ if not st.session_state.logged_in:
     with auth_container_col2:
         st.markdown("""
         <div class="fintech-card" style="padding: 1.75rem 2rem;">
-            <h3 style="margin-top: 0; margin-bottom: 0.5rem; text-align: center;">Welcome to Market Analysis App</h3>
+            <h3 style="margin-top: 0; margin-bottom: 0.5rem; text-align: center;">Sign in or create an account</h3>
             <p style="color: #94A3B8; text-align: center; font-size: 0.88rem; margin-bottom: 1.5rem;">
-                Sign in to your account or register to access real-time technical indicators, live Binance data, and trend signals.
+                Use your username and password to open the market terminal, VIP status, payments, and account settings.
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -659,7 +665,7 @@ if not st.session_state.logged_in:
     with f_col1:
         st.markdown("<div style='font-size: 0.85rem; color: #94A3B8;'><b style='color: #F8FAFC;'>⚡ Real-time Data:</b> Binance Spot API integration.</div>", unsafe_allow_html=True)
     with f_col2:
-        st.markdown("<div style='font-size: 0.85rem; color: #94A3B8;'><b style='color: #F8FAFC;'>🔒 Read-Only Mode:</b> No order placement or real-money transactions.</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size: 0.85rem; color: #94A3B8;'><b style='color: #F8FAFC;'>🔒 Payments:</b> Razorpay checkout. Live payouts stay off until authorized.</div>", unsafe_allow_html=True)
     with f_col3:
         st.markdown("<div style='font-size: 0.85rem; color: #94A3B8;'><b style='color: #F8FAFC;'>🚀 Quantitative AI Engine:</b> Multi-factor momentum scoring.</div>", unsafe_allow_html=True)
     st.stop()
@@ -1300,14 +1306,84 @@ if current_role == "admin":
             st.info("No backups exist yet. Click the button above to create your first backup.")
         st.stop()
 # =========================================================
-# SUBSCRIPTION ACCESS GATE (NO ONLINE CHECKOUT IN THIS BUILD)
+# SUBSCRIPTION ACCESS GATE & RAZORPAY CHECKOUT
 # =========================================================
-if current_role != "admin" and not is_sub_active:
-    st.warning("Your subscription access is currently inactive.")
-    st.info(
-        "Online payment checkout is disabled in this educational build. "
-        "Please contact the administrator if you need access."
+_rzp_order_id = get_query_param("razorpay_order_id")
+_rzp_payment_id = get_query_param("razorpay_payment_id")
+_rzp_signature = get_query_param("razorpay_signature")
+if _rzp_order_id and _rzp_payment_id and _rzp_signature:
+    _verify_res = verify_checkout_payment(
+        current_user,
+        _rzp_order_id,
+        _rzp_payment_id,
+        _rzp_signature,
     )
+    clear_query_params()
+    if _verify_res.get("success"):
+        st.success(_verify_res.get("message", "VIP Pass activated!"))
+        time.sleep(1)
+        st.rerun()
+    else:
+        st.error(_verify_res.get("message", "Payment verification failed."))
+
+if current_role != "admin" and not is_sub_active:
+    from payment_gateway import create_checkout_order, get_single_plan, get_gateway_config
+    plan = get_single_plan()
+    gw_cfg = get_gateway_config()
+    mode_label = "LIVE PAYMENT" if gw_cfg.get("mode") == "live" else "TEST MODE"
+
+    st.markdown(f"""
+    <div class="kukutv-vip-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <span class="kukutv-badge">🔥 {plan['name']}</span>
+            <span class="badge-bullish">{mode_label}</span>
+        </div>
+        <div style="margin: 1rem 0;">
+            <span class="kukutv-strike">₹{plan['original_price']}</span>
+            <span class="kukutv-price">₹{plan['amount']}</span>
+            <span style="color: #94A3B8; font-size: 1rem;">/ {plan['duration_days']} Days</span>
+        </div>
+        <p style="color: #CBD5E1; font-size: 0.95rem; margin-bottom: 1.25rem;">
+            Unlock real-time Binance Spot signals, RSI/MACD/EMA indicators, TradingView-style charts, and full market screener.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    _, btn_col, _ = st.columns([1, 2, 1])
+    with btn_col:
+        if st.button(f"💳 Pay ₹{plan['amount']} & Unlock VIP Pass", type="primary", use_container_width=True):
+            order_res = create_checkout_order(current_user)
+            if order_res.get("success"):
+                st.session_state["pending_rzp_order"] = order_res
+            else:
+                st.error(order_res.get("message", "Unable to start Razorpay checkout."))
+
+    pending_order = st.session_state.get("pending_rzp_order")
+    if pending_order and pending_order.get("order_id"):
+        components.html(f"""
+        <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+        <script>
+        var options = {{
+            "key": "{pending_order['key_id']}",
+            "amount": "{pending_order['amount']}",
+            "currency": "{pending_order['currency']}",
+            "name": "Market Analysis App",
+            "description": "{pending_order['plan_name']}",
+            "order_id": "{pending_order['order_id']}",
+            "handler": function (response) {{
+                var url = new URL(window.parent.location.href);
+                url.searchParams.set("razorpay_payment_id", response.razorpay_payment_id);
+                url.searchParams.set("razorpay_order_id", response.razorpay_order_id);
+                url.searchParams.set("razorpay_signature", response.razorpay_signature);
+                window.parent.location.href = url.toString();
+            }},
+            "theme": {{ "color": "#F59E0B" }}
+        }};
+        var rzp1 = new Razorpay(options);
+        rzp1.open();
+        </script>
+        """, height=0)
     st.stop()
 
 # =========================================================
