@@ -1426,10 +1426,72 @@ if current_role != "admin" and not is_sub_active:
 st.sidebar.markdown("<hr>", unsafe_allow_html=True)
 user_nav = st.sidebar.radio(
     "Workspace",
-    ["📈 Live Market Terminal", "⚙️ Account & Settings"],
+    ["📈 Live Market Terminal", "⭐ Watchlist", "📅 Economic Calendar", "⚙️ Account & Settings"],
     key="user_workspace_nav",
     label_visibility="collapsed",
 )
+
+if user_nav == "⭐ Watchlist":
+    st.markdown("""
+    <div class="fintech-hero-card">
+        <h1 style="margin: 0; font-size: 1.85rem;">⭐ My Crypto Watchlist</h1>
+        <p style="color: #94A3B8; margin: 4px 0 0 0; font-size: 0.9rem;">
+            Track your favorite Binance Spot pairs with live 24h prices and quick chart switching.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    if "user_watchlist" not in st.session_state:
+        st.session_state.user_watchlist = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT"]
+    all_syms = get_all_usdt_symbols() or ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT"]
+    w_c1, w_c2 = st.columns([3, 1])
+    with w_c1:
+        add_sym = st.selectbox("Add Pair to Watchlist", [s for s in all_syms if s not in st.session_state.user_watchlist] or all_syms)
+    with w_c2:
+        st.write("")
+        st.write("")
+        if st.button("➕ Add Pair", use_container_width=True, type="primary"):
+            if add_sym not in st.session_state.user_watchlist:
+                st.session_state.user_watchlist.append(add_sym)
+                st.rerun()
+
+    tickers = {t["Symbol"]: t for t in get_all_usdt_market_tickers()}
+    for w_sym in list(st.session_state.user_watchlist):
+        t = tickers.get(w_sym, {})
+        price = t.get("Price", 0.0)
+        chg = t.get("24h Change", 0.0)
+        c1, c2, c3, c4 = st.columns([2, 1.5, 1.5, 1])
+        c1.markdown(f"**{w_sym}**")
+        c2.markdown(f"`${price:,.4f}`" if price else "Syncing...")
+        chg_color = "#10B981" if chg >= 0 else "#EF4444"
+        c3.markdown(f"<span style='color:{chg_color};font-weight:700;'>{chg:+.2f}%</span>", unsafe_allow_html=True)
+        if c4.button("🗑️", key=f"rm_{w_sym}"):
+            st.session_state.user_watchlist.remove(w_sym)
+            st.rerun()
+    st.stop()
+
+if user_nav == "📅 Economic Calendar":
+    st.markdown("""
+    <div class="fintech-hero-card">
+        <h1 style="margin: 0; font-size: 1.85rem;">📅 Economic Calendar</h1>
+        <p style="color: #94A3B8; margin: 4px 0 0 0; font-size: 0.9rem;">
+            Key global macroeconomic events that impact crypto and financial markets.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    impact_filter = st.selectbox("Impact Filter", ["All", "High", "Medium", "Low"])
+    events = [
+        {"Time": "18:00 IST", "Currency": "USD", "Event": "US Initial Jobless Claims", "Impact": "High", "Forecast": "215K", "Prior": "213K"},
+        {"Time": "19:00 IST", "Currency": "USD", "Event": "US GDP Growth Rate QoQ", "Impact": "High", "Forecast": "2.8%", "Prior": "2.8%"},
+        {"Time": "19:30 IST", "Currency": "EUR", "Event": "ECB Interest Rate Decision", "Impact": "High", "Forecast": "3.25%", "Prior": "3.40%"},
+        {"Time": "20:30 IST", "Currency": "USD", "Event": "US Core PCE Price Index YoY", "Impact": "High", "Forecast": "2.8%", "Prior": "2.7%"},
+        {"Time": "14:30 IST", "Currency": "GBP", "Event": "UK Manufacturing PMI", "Impact": "Medium", "Forecast": "50.1", "Prior": "49.9"},
+        {"Time": "06:00 IST", "Currency": "JPY", "Event": "Japan CPI YoY", "Impact": "Medium", "Forecast": "2.4%", "Prior": "2.3%"},
+        {"Time": "11:30 IST", "Currency": "AUD", "Event": "Australia Retail Sales MoM", "Impact": "Low", "Forecast": "0.3%", "Prior": "0.1%"},
+    ]
+    if impact_filter != "All":
+        events = [e for e in events if e["Impact"] == impact_filter]
+    st.dataframe(pd.DataFrame(events), use_container_width=True, hide_index=True)
+    st.stop()
 
 if user_nav == "⚙️ Account & Settings":
     st.markdown("""
