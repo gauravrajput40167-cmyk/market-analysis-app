@@ -7,7 +7,7 @@ from datetime import datetime
 # DATABASE CONFIGURATION & PATH SETUP
 # =========================================================
 BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "memiixyz.db"
+DB_PATH = Path(os.getenv("MARKET_DB_PATH", str(BASE_DIR / "memiixyz.db")))
 BACKUP_DIR = BASE_DIR / "backups"
 _DB_INITIALIZED = False
 # =========================================================
@@ -44,6 +44,10 @@ ALLOWED_TABLES = {
     "configuration_history",
     "api_monitoring_logs",
     "database_monitoring_logs",
+    "subscription_plans",
+    "ledger_entries",
+    "notifications",
+    "payout_events",
 }
 def _get_table_columns(connection, table_name):
     """Retrieve existing column names for an allow-listed table."""
@@ -91,7 +95,8 @@ def initialize_database(force=False):
             "active": "INTEGER NOT NULL DEFAULT 1",
             "subscription_plan": "TEXT DEFAULT 'Free'",
             "subscription_start": "TEXT",
-            "subscription_expires_at": "TEXT"
+            "subscription_expires_at": "TEXT",
+            "display_name": "TEXT",
         })
         # 2. Payments Table (with Plan, Currency & Live Mode Audit Columns)
         connection.execute("""
@@ -122,7 +127,10 @@ def initialize_database(force=False):
             "currency": "TEXT DEFAULT 'INR'",
             "live_mode": "INTEGER DEFAULT 0",
             "verified_at": "TEXT",
-            "created_at": "TEXT"
+            "created_at": "TEXT",
+            "plan_id": "TEXT",
+            "failure_reason": "TEXT",
+            "provider_status": "TEXT",
         })
         # 3. Payment Attempts Table
         connection.execute("""
@@ -160,8 +168,69 @@ def initialize_database(force=False):
             "username": "TEXT",
             "amount": "TEXT NOT NULL DEFAULT '0'",
             "status": "TEXT NOT NULL DEFAULT 'pending'",
-            "created_at": "TEXT"
+            "created_at": "TEXT",
+            "destination": "TEXT",
+            "destination_masked": "TEXT",
+            "idempotency_key": "TEXT",
+            "payout_reference": "TEXT",
+            "payout_mode": "TEXT DEFAULT 'demo'",
+            "reviewed_by": "TEXT",
+            "reviewed_at": "TEXT",
+            "rejection_reason": "TEXT",
+            "completed_at": "TEXT",
         })
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS subscription_plans (
+                plan_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                amount_rupees TEXT NOT NULL,
+                duration_days INTEGER NOT NULL,
+                currency TEXT NOT NULL DEFAULT 'INR',
+                active INTEGER NOT NULL DEFAULT 1,
+                description TEXT,
+                updated_at TEXT
+            )
+        """)
+        connection.execute("""
+            INSERT OR IGNORE INTO subscription_plans (
+                plan_id, name, amount_rupees, duration_days, currency, active, description, updated_at
+            ) VALUES ('vip_pass', 'VIP 5-Day Pass', '2', 5, 'INR', 1,
+                      'Fixed VIP access plan. Price is controlled on the server.', CURRENT_TIMESTAMP)
+        """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS ledger_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                entry_type TEXT NOT NULL,
+                amount TEXT NOT NULL,
+                reference TEXT UNIQUE,
+                note TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                title TEXT NOT NULL,
+                body TEXT NOT NULL,
+                category TEXT,
+                is_read INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS payout_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                withdrawal_id INTEGER NOT NULL,
+                event_type TEXT NOT NULL,
+                reference TEXT,
+                verified INTEGER NOT NULL DEFAULT 0,
+                actor TEXT,
+                details TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         # 5. Activity Logs Table
         connection.execute("""
             CREATE TABLE IF NOT EXISTS activity_logs (
@@ -274,6 +343,14 @@ def initialize_database(force=False):
         connection.execute("CREATE INDEX IF NOT EXISTS idx_payments_live_mode ON payments(live_mode)")
         connection.execute("CREATE INDEX IF NOT EXISTS idx_payment_attempts_payment_id ON payment_attempts(payment_id)")
         connection.execute("CREATE INDEX IF NOT EXISTS idx_withdrawals_username ON withdrawals(username)")
+        connection.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_withdrawals_idempotency
+            ON withdrawals(idempotency_key)
+            WHERE idempotency_key IS NOT NULL AND TRIM(idempotency_key) != ''
+        """)
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_ledger_username ON ledger_entries(username)")
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_notifications_username ON notifications(username)")
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_payout_events_withdrawal ON payout_events(withdrawal_id)")
         connection.execute("CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at)")
         connection.execute("CREATE INDEX IF NOT EXISTS idx_activity_logs_username ON activity_logs(username)")
         connection.execute("CREATE INDEX IF NOT EXISTS idx_activity_logs_action ON activity_logs(action)")
@@ -581,9 +658,26 @@ DATA_ACCESS_TABLES = {
     },
     "Withdrawals": {
         "table": "withdrawals",
-        "columns": ["id", "username", "amount", "status", "created_at"],
-        "search_columns": ["username", "status"],
+        "columns": [
+            "id", "username", "amount", "status", "destination_masked",
+            "payout_mode", "payout_reference", "reviewed_by", "created_at"
+        ],
+        "search_columns": ["username", "status", "payout_reference"],
         "status_column": "status",
+        "date_column": "created_at"
+    },
+    "Subscription Plans": {
+        "table": "subscription_plans",
+        "columns": ["plan_id", "name", "amount_rupees", "duration_days", "currency", "active", "description"],
+        "search_columns": ["plan_id", "name"],
+        "status_column": "active",
+        "date_column": None
+    },
+    "Ledger": {
+        "table": "ledger_entries",
+        "columns": ["id", "username", "entry_type", "amount", "reference", "note", "created_at"],
+        "search_columns": ["username", "entry_type", "reference", "note"],
+        "status_column": "entry_type",
         "date_column": "created_at"
     },
     "Payment Attempts": {
@@ -647,6 +741,9 @@ def get_data_access_records(dataset, search_text=None, status="All", start_date=
     if spec["date_column"] and end_date:
         conditions.append(f"date({spec['date_column']}) <= date(?)")
         params.append(str(end_date))
+    if spec["table"] == "app_configurations":
+        conditions.append("config_key != ?")
+        params.append("demo_payout_secret")
     where = " WHERE " + " AND ".join(conditions) if conditions else ""
     limit = max(1, min(int(limit), 1000))
     sql = "SELECT " + ", ".join(spec["columns"]) + f" FROM {spec['table']}{where} ORDER BY rowid DESC LIMIT ?"
@@ -748,7 +845,8 @@ def get_api_monitoring_summary():
 DATABASE_MONITOR_TABLES = (
     "users", "payments", "payment_attempts", "withdrawals",
     "activity_logs", "security_logs", "app_configurations",
-    "configuration_history", "api_monitoring_logs", "database_monitoring_logs"
+    "configuration_history", "api_monitoring_logs", "database_monitoring_logs",
+    "subscription_plans", "ledger_entries", "notifications", "payout_events",
 )
 def get_database_monitor_snapshot(run_integrity_check=True):
     """Retrieve real-time database file, table count, and integrity telemetry."""

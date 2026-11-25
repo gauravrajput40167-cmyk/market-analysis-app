@@ -531,6 +531,8 @@ def update_payment_status(username, status, transaction_id=None, razorpay_paymen
         return False
     with get_connection() as connection:
         if status == "success":
+            # Status updates alone must not grant VIP. Activation happens only
+            # after payment signature and provider checks, or an admin action.
             connection.execute("""
                 UPDATE payments
                 SET payment_status = ?,
@@ -539,7 +541,6 @@ def update_payment_status(username, status, transaction_id=None, razorpay_paymen
                     verified_at = CURRENT_TIMESTAMP
                 WHERE id = ?
             """, (status, transaction_id, razorpay_payment_id, row["id"]))
-            activate_subscription(username)
         else:
             connection.execute("""
                 UPDATE payments
@@ -642,57 +643,16 @@ def _withdrawal_row_to_dict(row):
         "status": row["status"]
     }
 def create_withdrawal_request(username, amount):
-    """Create a withdrawal request. Prevents duplicate concurrent pending requests."""
-    if username not in USER_DATA:
-        load_users_from_database()
-        if username not in USER_DATA:
-            return False
-    with get_connection() as connection:
-        pending = connection.execute("""
-            SELECT id
-            FROM withdrawals
-            WHERE username = ? AND status = 'pending'
-            LIMIT 1
-        """, (username,)).fetchone()
-        if pending is not None:
-            return False
-        payment = connection.execute("""
-            SELECT payment_status
-            FROM payments
-            WHERE username = ? AND payment_status = 'success'
-            ORDER BY id DESC
-            LIMIT 1
-        """, (username,)).fetchone()
-        if payment is None:
-            return False
-        try:
-            amount = Decimal(str(amount))
-        except (InvalidOperation, ValueError, TypeError):
-            return False
-        if not amount.is_finite() or amount <= 0:
-            return False
-        connection.execute("""
-            INSERT INTO withdrawals (username, amount, status)
-            VALUES (?, ?, 'pending')
-        """, (username, str(amount)))
-    return True
+    """Create a withdrawal request against available balance. Blocks duplicates."""
+    from finance import request_withdrawal
+    result = request_withdrawal(username, amount, destination="", idempotency_key=None)
+    return bool(result.get("ok"))
 def get_withdrawal_request(username):
     return _withdrawal_row_to_dict(_latest_withdrawal_row(username))
 def update_withdrawal_status(username, status):
-    """Update status of a pending withdrawal ('completed', 'rejected', 'cancelled')."""
-    allowed_statuses = {"pending", "completed", "rejected", "cancelled"}
-    if status not in allowed_statuses:
-        return False
-    row = _latest_withdrawal_row(username)
-    if row is None or row["status"] != "pending":
-        return False
-    with get_connection() as connection:
-        cursor = connection.execute("""
-            UPDATE withdrawals
-            SET status = ?
-            WHERE id = ? AND status = 'pending'
-        """, (status, row["id"]))
-        return cursor.rowcount == 1
+    """Update the latest open withdrawal. Completed payouts stay on the demo rail unless live payouts are authorized."""
+    from finance import update_latest_withdrawal_status
+    return update_latest_withdrawal_status(username, status)
 def get_withdrawal_count():
     with get_connection() as connection:
         row = connection.execute("SELECT COUNT(*) AS total FROM withdrawals").fetchone()
@@ -766,10 +726,13 @@ def get_withdrawal_summary():
         "completed_amount": get_completed_withdrawal_amount()
     }
 def get_user_financial_summary(username):
+    from finance import get_balance
+    balance = get_balance(username)
     return {
         "payment": get_payment_record(username),
         "withdrawal": get_withdrawal_request(username),
-        "subscription": get_user_subscription_info(username)
+        "subscription": get_user_subscription_info(username),
+        "balance": balance,
     }
 def get_user_withdrawal_amount(username):
     row = _latest_withdrawal_row(username)
@@ -846,7 +809,15 @@ def get_all_withdrawals_detailed(admin_username):
                 username,
                 amount,
                 status,
-                created_at
+                destination_masked,
+                payout_mode,
+                payout_reference,
+                reviewed_by,
+                reviewed_at,
+                rejection_reason,
+                idempotency_key,
+                created_at,
+                completed_at
             FROM withdrawals
             ORDER BY id DESC
         """).fetchall()
@@ -878,7 +849,9 @@ def get_admin_dashboard_summary(admin_username):
             SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
-                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed
+                SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
+                SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected
             FROM withdrawals
         """).fetchone()
     return {
@@ -894,5 +867,56 @@ def get_admin_dashboard_summary(admin_username):
         "test_payments": int(payments["test_count"] or 0),
         "total_withdrawals": int(withdrawals["total"] or 0),
         "pending_withdrawals": int(withdrawals["pending"] or 0),
-        "completed_withdrawals": int(withdrawals["completed"] or 0)
+        "approved_withdrawals": int(withdrawals["approved"] or 0),
+        "completed_withdrawals": int(withdrawals["completed"] or 0),
+        "rejected_withdrawals": int(withdrawals["rejected"] or 0),
     }
+
+
+def get_user_profile(username):
+    """Return the signed-in user's profile without the password hash."""
+    if not isinstance(username, str) or not username.strip():
+        return None
+    username = username.strip()
+    with get_connection() as connection:
+        row = connection.execute("""
+            SELECT username, email, mobile, role, active, display_name,
+                   subscription, subscription_plan, subscription_start, subscription_expires_at
+            FROM users
+            WHERE username = ?
+        """, (username,)).fetchone()
+    if row is None:
+        return None
+    profile = dict(row)
+    profile["subscription_info"] = get_user_subscription_info(username)
+    return profile
+
+
+def change_password(username, current_password, new_password):
+    """Change a password after verifying the current one. Stores a new PBKDF2 hash."""
+    if not isinstance(username, str):
+        return False, "Sign in before changing the password."
+    username = username.strip()
+    if username not in USER_DATA:
+        load_users_from_database()
+    user = USER_DATA.get(username)
+    if not user or not user.get("active", False):
+        return False, "Account is unavailable."
+    if not verify_password(current_password, user.get("password", "")):
+        record_security_event(username, "PASSWORD_CHANGE_FAILED", "Current password did not match.", "WARNING")
+        return False, "Current password is incorrect."
+    if not validate_password(new_password):
+        return False, "New password must be at least 8 characters."
+    if current_password == new_password:
+        return False, "Choose a password that is different from the current one."
+    updated_hash = hash_password(new_password)
+    with get_connection() as connection:
+        cursor = connection.execute("""
+            UPDATE users SET password = ? WHERE username = ? AND active = 1
+        """, (updated_hash, username))
+        if cursor.rowcount != 1:
+            return False, "Password could not be updated."
+    USER_DATA[username]["password"] = updated_hash
+    record_user_activity(username, "PASSWORD_CHANGED", "Password hash updated.")
+    record_security_event(username, "PASSWORD_CHANGED", "Password changed by the account owner.")
+    return True, "Password updated."
