@@ -1335,13 +1335,13 @@ if current_role != "admin" and not is_sub_active:
     st.markdown(f"""
     <div class="kukutv-vip-card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-            <span class="kukutv-badge">🔥 {plan['name']}</span>
+            <span class="kukutv-badge">🔥 {plan.get('name', 'VIP 5-Day Pass')}</span>
             <span class="badge-bullish">{mode_label}</span>
         </div>
         <div style="margin: 1rem 0;">
-            <span class="kukutv-strike">₹{plan['original_price']}</span>
-            <span class="kukutv-price">₹{plan['amount']}</span>
-            <span style="color: #94A3B8; font-size: 1rem;">/ {plan['duration_days']} Days</span>
+            <span class="kukutv-strike">₹{plan.get('original_price', 49)}</span>
+            <span class="kukutv-price">₹{plan.get('amount', 2)}</span>
+            <span style="color: #94A3B8; font-size: 1rem;">/ {plan.get('duration_days', 5)} Days</span>
         </div>
         <p style="color: #CBD5E1; font-size: 0.95rem; margin-bottom: 1.25rem;">
             Unlock real-time Binance Spot signals, RSI/MACD/EMA indicators, TradingView-style charts, and full market screener.
