@@ -1771,10 +1771,42 @@ def render_main_market_dashboard():
     # BINANCE OHLCV + TRADINGVIEW-STYLE LIGHTWEIGHT CHART
     # -----------------------------------------------------
     st.subheader("📈 Advanced Candlestick Chart")
-    st.caption(
-        "Binance public Spot candles • Read-only market data • "
-        "Chart refreshes with the dashboard"
+    chart_mode = st.radio(
+        "Chart Engine",
+        ["TradingView Pro (Full Tools)", "Custom Binance Chart"],
+        horizontal=True,
+        key="chart_engine_mode",
     )
+    if chart_mode == "TradingView Pro (Full Tools)":
+        tv_symbol = f"BINANCE:{symbol}"
+        components.html(f"""
+        <div class="tradingview-widget-container" style="height:620px;width:100%;">
+          <div id="tradingview_pro_chart" style="height:620px;width:100%;"></div>
+          <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+          <script type="text/javascript">
+          new TradingView.widget({{
+            "autosize": true,
+            "symbol": "{tv_symbol}",
+            "interval": "60",
+            "timezone": "Asia/Kolkata",
+            "theme": "dark",
+            "style": "1",
+            "locale": "en",
+            "toolbar_bg": "#0F172A",
+            "enable_publishing": false,
+            "hide_side_toolbar": false,
+            "allow_symbol_change": true,
+            "withdateranges": true,
+            "container_id": "tradingview_pro_chart"
+          }});
+          </script>
+        </div>
+        """, height=635)
+    if chart_mode == "Custom Binance Chart":
+        st.caption(
+            "Binance public Spot candles • Read-only market data • "
+            "Chart refreshes with the dashboard"
+        )
 
     chart_control_1, chart_control_2, chart_control_3, chart_control_4 = st.columns([1.2, 1.2, 1, 1])
     with chart_control_1:
