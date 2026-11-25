@@ -1652,7 +1652,7 @@ def render_main_market_dashboard():
     with chart_control_1:
         chart_interval = st.selectbox(
             "Timeframe",
-            ["1m", "5m", "15m", "1h", "4h", "1d", "1w", "1M"],
+            ["1m", "5m", "15m", "1h", "4h", "1d", "1w", "1M", "1Y", "5Y", "ALL"],
             index=0,
             key="tv_chart_interval",
         )
@@ -1661,8 +1661,15 @@ def render_main_market_dashboard():
     with chart_control_3:
         show_ema50 = st.checkbox("Show EMA 50", value=False, key="tv_show_ema50")
 
+    _range_map = {
+        "1Y": ("1d", 365),
+        "5Y": ("1w", 260),
+        "ALL": ("1M", 1000),
+    }
+    _api_interval, _api_limit = _range_map.get(chart_interval, (chart_interval, 1000))
+
     try:
-        chart_candles = get_binance_klines(symbol, chart_interval, 1000)
+        chart_candles = get_binance_klines(symbol, _api_interval, _api_limit)
     except Exception as chart_error:
         chart_candles = []
         st.warning(f"Unable to load Binance candlesticks right now: {chart_error}")
