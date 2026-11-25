@@ -1391,7 +1391,7 @@ if current_role != "admin" and not is_sub_active:
             e.preventDefault();
         }};
         </script>
-        """, height=80)
+        """, height=700, scrolling=True)
     st.stop()
 
 # =========================================================
