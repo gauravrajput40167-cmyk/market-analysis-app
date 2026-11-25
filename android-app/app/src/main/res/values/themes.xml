@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.MarketAnalysisApp" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">#F59E0B</item>
+        <item name="android:windowBackground">#080C14</item>
+    </style>
+</resources>

@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">Market Analysis</string>
+    <string name="offline_title">Connection Unavailable</string>
+    <string name="offline_message">Please check your internet connection and try again.</string>
+    <string name="retry">Retry</string>
+</resources>
