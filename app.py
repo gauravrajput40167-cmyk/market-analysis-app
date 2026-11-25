@@ -1474,23 +1474,25 @@ if user_nav == "📅 Economic Calendar":
     <div class="fintech-hero-card">
         <h1 style="margin: 0; font-size: 1.85rem;">📅 Economic Calendar</h1>
         <p style="color: #94A3B8; margin: 4px 0 0 0; font-size: 0.9rem;">
-            Key global macroeconomic events that impact crypto and financial markets.
+            Live global macroeconomic events that impact crypto and financial markets.
         </p>
     </div>
     """, unsafe_allow_html=True)
-    impact_filter = st.selectbox("Impact Filter", ["All", "High", "Medium", "Low"])
-    events = [
-        {"Time": "18:00 IST", "Currency": "USD", "Event": "US Initial Jobless Claims", "Impact": "High", "Forecast": "215K", "Prior": "213K"},
-        {"Time": "19:00 IST", "Currency": "USD", "Event": "US GDP Growth Rate QoQ", "Impact": "High", "Forecast": "2.8%", "Prior": "2.8%"},
-        {"Time": "19:30 IST", "Currency": "EUR", "Event": "ECB Interest Rate Decision", "Impact": "High", "Forecast": "3.25%", "Prior": "3.40%"},
-        {"Time": "20:30 IST", "Currency": "USD", "Event": "US Core PCE Price Index YoY", "Impact": "High", "Forecast": "2.8%", "Prior": "2.7%"},
-        {"Time": "14:30 IST", "Currency": "GBP", "Event": "UK Manufacturing PMI", "Impact": "Medium", "Forecast": "50.1", "Prior": "49.9"},
-        {"Time": "06:00 IST", "Currency": "JPY", "Event": "Japan CPI YoY", "Impact": "Medium", "Forecast": "2.4%", "Prior": "2.3%"},
-        {"Time": "11:30 IST", "Currency": "AUD", "Event": "Australia Retail Sales MoM", "Impact": "Low", "Forecast": "0.3%", "Prior": "0.1%"},
-    ]
-    if impact_filter != "All":
-        events = [e for e in events if e["Impact"] == impact_filter]
-    st.dataframe(pd.DataFrame(events), use_container_width=True, hide_index=True)
+    components.html("""
+    <div class="tradingview-widget-container">
+      <div class="tradingview-widget-container__widget"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-events.js" async>
+      {
+        "colorTheme": "dark",
+        "isTransparent": true,
+        "width": "100%",
+        "height": "650",
+        "locale": "en",
+        "importanceFilter": "-1,0,1"
+      }
+      </script>
+    </div>
+    """, height=670)
     st.stop()
 
 if user_nav == "⚙️ Account & Settings":
