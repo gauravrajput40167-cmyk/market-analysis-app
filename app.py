@@ -1421,6 +1421,75 @@ if current_role != "admin" and not is_sub_active:
     st.stop()
 
 # =========================================================
+# USER WORKSPACE NAVIGATION (TERMINAL vs ACCOUNT & SETTINGS)
+# =========================================================
+st.sidebar.markdown("<hr>", unsafe_allow_html=True)
+user_nav = st.sidebar.radio(
+    "Workspace",
+    ["📈 Live Market Terminal", "⚙️ Account & Settings"],
+    key="user_workspace_nav",
+    label_visibility="collapsed",
+)
+
+if user_nav == "⚙️ Account & Settings":
+    st.markdown("""
+    <div class="fintech-hero-card">
+        <h1 style="margin: 0; font-size: 1.85rem;">⚙️ Account & Settings</h1>
+        <p style="color: #94A3B8; margin: 4px 0 0 0; font-size: 0.9rem;">
+            Manage your profile, VIP subscription status, and security preferences.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    user_rec = auth.USER_DATA.get(current_user, {})
+    p_col1, p_col2 = st.columns(2)
+    with p_col1:
+        st.markdown(f"""
+        <div class="fintech-card">
+            <h3 style="margin-top:0;">👤 Profile Details</h3>
+            <p><b>Username:</b> {current_user}</p>
+            <p><b>Email:</b> {user_rec.get('email', 'N/A')}</p>
+            <p><b>Mobile:</b> {user_rec.get('mobile', 'N/A')}</p>
+            <p><b>Role:</b> {current_role.upper()}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    with p_col2:
+        st.markdown(f"""
+        <div class="fintech-card">
+            <h3 style="margin-top:0;">💎 VIP Subscription</h3>
+            <p><b>Plan:</b> {sub_info.get('plan', 'Free')}</p>
+            <p><b>Status:</b> {sub_info.get('status', 'Inactive')}</p>
+            <p><b>Days Remaining:</b> {sub_info.get('days_remaining', 0)} days</p>
+            <p><b>Expires At (UTC):</b> {sub_info.get('expires_at', 'N/A')}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.subheader("🔐 Change Password")
+    with st.form("change_password_form"):
+        cur_pw = st.text_input("Current Password", type="password")
+        new_pw = st.text_input("New Password (min 8 chars)", type="password")
+        cnf_pw = st.text_input("Confirm New Password", type="password")
+        if st.form_submit_button("Update Password", type="primary"):
+            stored_pw = user_rec.get("password", "")
+            if not auth.verify_password(cur_pw, stored_pw):
+                st.error("Current password is incorrect.")
+            elif len(new_pw) < 8:
+                st.error("New password must be at least 8 characters.")
+            elif new_pw != cnf_pw:
+                st.error("New passwords do not match.")
+            else:
+                new_hash = auth.hash_password(new_pw)
+                with database.get_connection() as conn:
+                    conn.execute("UPDATE users SET password = ? WHERE username = ?", (new_hash, current_user))
+                    conn.commit()
+                if current_user in auth.USER_DATA:
+                    auth.USER_DATA[current_user]["password"] = new_hash
+                log_activity(current_user, "PASSWORD_CHANGED", "User updated password from Account & Settings.")
+                st.success("Password updated successfully!")
+    st.stop()
+
+# =========================================================
 # MARKET SETTINGS & TARGET CONTROLS (SIDEBAR)
 # =========================================================
 st.sidebar.markdown("<hr>", unsafe_allow_html=True)
