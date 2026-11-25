@@ -25,7 +25,7 @@ android {
         // Replace with your deployed Streamlit HTTPS URL before building release
         val appUrl = (project.findProperty("APP_URL") as String?)
             ?: System.getenv("APP_URL")
-            ?: "https://market-prediction-app.onrender.com"
+            ?: "https://market-analysis-app-nyxvj6aduetktpbppjdjg5.streamlit.app"
         buildConfigField("String", "APP_URL", "\"$appUrl\"")
     }
 

@@ -6,7 +6,7 @@ on:
       app_url:
         description: 'Deployed Streamlit HTTPS URL'
         required: true
-        default: 'https://market-prediction-app.onrender.com'
+        default: 'https://market-analysis-app-nyxvj6aduetktpbppjdjg5.streamlit.app'
 
 jobs:
   build:

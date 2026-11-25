@@ -101,6 +101,60 @@ def _install_activity_tracking():
     wrap("create_withdrawal_request", lambda a, k, r: (str(a[0]), "WITHDRAWAL_REQUEST_CREATED", f"Withdrawal request amount: {a[1] if len(a) > 1 else k.get('amount', 'unknown')}") if r else None)
     wrap("update_withdrawal_status", lambda a, k, r: (str(a[0]), "WITHDRAWAL_STATUS_UPDATED", f"Withdrawal status set to {a[1] if len(a) > 1 else k.get('status', 'unknown')}") if r else None)
 _install_activity_tracking()
+
+def _bootstrap_admin_from_secrets():
+    """Provision or sync the admin account from Streamlit Secrets or environment variables."""
+    def _read_setting(key, default=""):
+        try:
+            if key in st.secrets:
+                return str(st.secrets[key]).strip()
+        except Exception:
+            pass
+        return str(os.getenv(key, default)).strip()
+
+    admin_user = _read_setting("ADMIN_USERNAME")
+    admin_pass = _read_setting("ADMIN_PASSWORD")
+    if not admin_user or not admin_pass:
+        return
+
+    admin_email = _read_setting("ADMIN_EMAIL", f"{admin_user}@admin.local").lower()
+    admin_mobile = _read_setting("ADMIN_MOBILE", "9999999999")
+    password_hash = auth.hash_password(admin_pass)
+
+    try:
+        database.initialize_database()
+        with database.get_connection() as connection:
+            existing = connection.execute(
+                "SELECT username FROM users WHERE username = ?",
+                (admin_user,),
+            ).fetchone()
+            if existing:
+                connection.execute(
+                    """
+                    UPDATE users
+                    SET password = ?, role = 'admin', active = 1, subscription = 1,
+                        subscription_plan = 'Admin Unlimited'
+                    WHERE username = ?
+                    """,
+                    (password_hash, admin_user),
+                )
+            else:
+                connection.execute(
+                    """
+                    INSERT INTO users (
+                        username, email, mobile, password, role,
+                        subscription, active, subscription_plan
+                    )
+                    VALUES (?, ?, ?, ?, 'admin', 1, 1, 'Admin Unlimited')
+                    """,
+                    (admin_user, admin_email, admin_mobile, password_hash),
+                )
+            connection.commit()
+        auth.load_users_from_database()
+    except Exception as bootstrap_err:
+        print(f"[AdminBootstrap] Failed to provision admin: {bootstrap_err}")
+
+_bootstrap_admin_from_secrets()
 # =========================================================
 # STREAMLIT PAGE CONFIGURATION & FINTECH DESIGN SYSTEM
 # =========================================================
