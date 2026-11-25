@@ -674,17 +674,12 @@ if not st.session_state.logged_in:
 # =========================================================
 current_user = st.session_state.username
 current_role = st.session_state.role
-st.sidebar.markdown(f"""
-<div style="padding: 0.75rem 0 1rem 0;">
-    <div style="display: flex; align-items: center; gap: 10px;">
-        <div style="background: linear-gradient(135deg, #F59E0B, #10B981); width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px;">
-            📈
-        </div>
-        <div>
-            <div style="font-weight: 700; color: #F8FAFC; font-size: 1.1rem; line-height: 1.2;">Market Analysis App</div>
-            <div style="color: #64748B; font-size: 0.75rem;">SaaS Analytics Pro</div>
-        </div>
-    </div>
+if os.path.exists(LOGO_PATH):
+    st.sidebar.image(LOGO_PATH, width=48)
+st.sidebar.markdown("""
+<div style="padding: 0.25rem 0 0.75rem 0;">
+    <div style="font-weight: 700; color: #F8FAFC; font-size: 1.1rem; line-height: 1.2;">Market Analysis App</div>
+    <div style="color: #64748B; font-size: 0.75rem;">SaaS Analytics Pro</div>
 </div>
 """, unsafe_allow_html=True)
 # Fetch Subscription Telemetry
