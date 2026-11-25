@@ -1780,14 +1780,20 @@ def render_main_market_dashboard():
         </head>
         <body>
           <div style="position:relative;">
-            <div style="position:absolute;top:10px;left:10px;z-index:10;display:flex;gap:6px;">
-              <button onclick="zoomChart(0.8)" style="background:#1E293B;color:#E2E8F0;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;">🔍+</button>
-              <button onclick="zoomChart(1.25)" style="background:#1E293B;color:#E2E8F0;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;">🔍-</button>
-              <button onclick="resetChart()" style="background:#1E293B;color:#E2E8F0;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;">↺ Reset</button>
+            <div style="position:absolute;top:10px;left:10px;z-index:10;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+              <button onclick="zoomChart(0.8)" style="background:#1E293B;color:#E2E8F0;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 9px;cursor:pointer;font-size:12px;">🔍+</button>
+              <button onclick="zoomChart(1.25)" style="background:#1E293B;color:#E2E8F0;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 9px;cursor:pointer;font-size:12px;">🔍-</button>
+              <button onclick="resetChart()" style="background:#1E293B;color:#E2E8F0;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 9px;cursor:pointer;font-size:12px;">↺ Reset</button>
+              <button id="tool-trend" onclick="setDrawTool('trend')" style="background:#1E293B;color:#E2E8F0;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 9px;cursor:pointer;font-size:12px;">📏 Trend Line</button>
+              <button id="tool-hline" onclick="setDrawTool('hline')" style="background:#1E293B;color:#E2E8F0;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 9px;cursor:pointer;font-size:12px;">➖ H-Line</button>
+              <button id="tool-fib" onclick="setDrawTool('fib')" style="background:#1E293B;color:#E2E8F0;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 9px;cursor:pointer;font-size:12px;">📐 Fib</button>
+              <button id="tool-measure" onclick="setDrawTool('measure')" style="background:#1E293B;color:#E2E8F0;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 9px;cursor:pointer;font-size:12px;">📐 Measure</button>
+              <button onclick="clearDrawings()" style="background:#7F1D1D;color:#FCA5A5;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 9px;cursor:pointer;font-size:12px;">🗑️ Clear</button>
+              <span id="draw-status" style="color:#F59E0B;font-size:12px;font-weight:600;margin-left:4px;"></span>
             </div>
             <div id="chart"></div>
           </div>
-          <div id="chart-note">Drag to pan • Scroll to zoom • Crosshair shows candle values</div>
+          <div id="chart-note">Drag to pan • Scroll to zoom • Select a drawing tool above and click on chart</div>
           <script>
             const candleData = {chart_data_json};
             const chartContainer = document.getElementById("chart");
@@ -1924,6 +1930,79 @@ def render_main_market_dashboard():
               window.resetChart = function() {{
                 chart.timeScale().fitContent();
               }};
+
+              let activeTool = null;
+              let pendingPoints = [];
+              let drawnSeries = [];
+              let drawnPriceLines = [];
+
+              window.setDrawTool = function(tool) {{
+                activeTool = (activeTool === tool) ? null : tool;
+                pendingPoints = [];
+                ["trend", "hline", "fib", "measure"].forEach(t => {{
+                  const btn = document.getElementById("tool-" + t);
+                  if (btn) btn.style.borderColor = (activeTool === t) ? "#F59E0B" : "rgba(255,255,255,0.15)";
+                }});
+                const stEl = document.getElementById("draw-status");
+                if (stEl) stEl.textContent = activeTool ? ("Click chart: " + activeTool.toUpperCase()) : "";
+              }};
+
+              window.clearDrawings = function() {{
+                drawnSeries.forEach(s => chart.removeSeries(s));
+                drawnSeries = [];
+                drawnPriceLines.forEach(pl => mainSeries.removePriceLine(pl));
+                drawnPriceLines = [];
+                pendingPoints = [];
+                const stEl = document.getElementById("draw-status");
+                if (stEl) stEl.textContent = "";
+              }};
+
+              chart.subscribeClick(param => {{
+                if (!activeTool || !param.time || !param.point) return;
+                const price = mainSeries.coordinateToPrice(param.point.y);
+                if (price === null || price === undefined) return;
+                const stEl = document.getElementById("draw-status");
+
+                if (activeTool === "hline") {{
+                  const pl = mainSeries.createPriceLine({{
+                    price: price, color: "#38BDF8", lineWidth: 2,
+                    lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true, title: "S/R"
+                  }});
+                  drawnPriceLines.push(pl);
+                  setDrawTool(null);
+                  return;
+                }}
+
+                pendingPoints.push({{ time: param.time, value: price }});
+                if (pendingPoints.length === 1) {{
+                  if (stEl) stEl.textContent = "Click 2nd point...";
+                  return;
+                }}
+
+                const p1 = pendingPoints[0], p2 = pendingPoints[1];
+                if (activeTool === "trend") {{
+                  const line = chart.addLineSeries({{ color: "#F59E0B", lineWidth: 2, priceLineVisible: false, lastValueVisible: false }});
+                  const pts = p1.time <= p2.time ? [p1, p2] : [p2, p1];
+                  line.setData(pts);
+                  drawnSeries.push(line);
+                }} else if (activeTool === "fib") {{
+                  const hi = Math.max(p1.value, p2.value), lo = Math.min(p1.value, p2.value), diff = hi - lo;
+                  [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1].forEach(lvl => {{
+                    const pl = mainSeries.createPriceLine({{
+                      price: hi - diff * lvl, color: "#A855F7", lineWidth: 1,
+                      lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: true,
+                      title: "Fib " + (lvl * 100).toFixed(1) + "%"
+                    }});
+                    drawnPriceLines.push(pl);
+                  }});
+                }} else if (activeTool === "measure") {{
+                  const pct = ((p2.value - p1.value) / p1.value) * 100;
+                  if (stEl) stEl.textContent = `Measure: ${{pct >= 0 ? "+" : ""}}${{pct.toFixed(2)}}% ($${{(p2.value - p1.value).toFixed(2)}})`;
+                  pendingPoints = [];
+                  return;
+                }}
+                setDrawTool(null);
+              }});
 
               chart.timeScale().fitContent();
               new ResizeObserver(entries => {{
