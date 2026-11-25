@@ -1773,8 +1773,8 @@ def render_main_market_dashboard():
     st.subheader("📈 Advanced Candlestick Chart")
     tv_symbol = f"BINANCE:{symbol}"
     components.html(f"""
-    <div class="tradingview-widget-container" style="height:620px;width:100%;">
-      <div id="tradingview_pro_chart" style="height:620px;width:100%;"></div>
+    <div class="tradingview-widget-container" style="height:{_chart_h}px;width:100%;">
+      <div id="tradingview_pro_chart" style="height:{_chart_h}px;width:100%;"></div>
       <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
       <script type="text/javascript">
       new TradingView.widget({{
@@ -1794,7 +1794,7 @@ def render_main_market_dashboard():
       }});
       </script>
     </div>
-    """, height=635)
+    """, height=_chart_h + 15)
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("🌐 Global Crypto Benchmark Overview")
     overview_coins = ["BTCUSDT", "ETHUSDT", "BNBUSDT"]
