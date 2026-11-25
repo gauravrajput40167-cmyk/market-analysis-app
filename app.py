@@ -1648,7 +1648,7 @@ def render_main_market_dashboard():
         "Chart refreshes with the dashboard"
     )
 
-    chart_control_1, chart_control_2, chart_control_3 = st.columns([1, 1, 1])
+    chart_control_1, chart_control_2, chart_control_3, chart_control_4 = st.columns([1.2, 1.2, 1, 1])
     with chart_control_1:
         chart_interval = st.selectbox(
             "Timeframe",
@@ -1657,9 +1657,18 @@ def render_main_market_dashboard():
             key="tv_chart_interval",
         )
     with chart_control_2:
-        show_ema20 = st.checkbox("Show EMA 20", value=True, key="tv_show_ema20")
+        chart_type = st.selectbox(
+            "Chart Type",
+            ["Candles", "Line", "Area", "Bars"],
+            index=0,
+            key="tv_chart_type",
+        )
     with chart_control_3:
-        show_ema50 = st.checkbox("Show EMA 50", value=False, key="tv_show_ema50")
+        show_ema20 = st.checkbox("EMA 20", value=True, key="tv_show_ema20")
+        show_ema50 = st.checkbox("EMA 50", value=False, key="tv_show_ema50")
+    with chart_control_4:
+        show_sma20 = st.checkbox("SMA 20", value=False, key="tv_show_sma20")
+        price_line_val = st.number_input("Price Line ($)", min_value=0.0, value=0.0, step=10.0, key="tv_price_line")
 
     _range_map = {
         "1Y": ("1d", 365),
@@ -1678,6 +1687,9 @@ def render_main_market_dashboard():
         chart_data_json = json.dumps(chart_candles, separators=(",", ":"))
         ema20_enabled = "true" if show_ema20 else "false"
         ema50_enabled = "true" if show_ema50 else "false"
+        sma20_enabled = "true" if show_sma20 else "false"
+        chart_type_js = chart_type
+        price_line_js = float(price_line_val or 0.0)
 
         chart_html = f"""
         <!DOCTYPE html>
@@ -1698,7 +1710,14 @@ def render_main_market_dashboard():
           </style>
         </head>
         <body>
-          <div id="chart"></div>
+          <div style="position:relative;">
+            <div style="position:absolute;top:10px;left:10px;z-index:10;display:flex;gap:6px;">
+              <button onclick="zoomChart(0.8)" style="background:#1E293B;color:#E2E8F0;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;">🔍+</button>
+              <button onclick="zoomChart(1.25)" style="background:#1E293B;color:#E2E8F0;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;">🔍-</button>
+              <button onclick="resetChart()" style="background:#1E293B;color:#E2E8F0;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;">↺ Reset</button>
+            </div>
+            <div id="chart"></div>
+          </div>
           <div id="chart-note">Drag to pan • Scroll to zoom • Crosshair shows candle values</div>
           <script>
             const candleData = {chart_data_json};
@@ -1730,13 +1749,37 @@ def render_main_market_dashboard():
                 localization: {{ locale: "en-US" }}
               }});
 
-              const candleSeries = chart.addCandlestickSeries({{
-                upColor: "#16A34A", downColor: "#DC2626",
-                borderUpColor: "#16A34A", borderDownColor: "#DC2626",
-                wickUpColor: "#16A34A", wickDownColor: "#DC2626",
-                priceLineVisible: true
-              }});
-              candleSeries.setData(candleData);
+              let mainSeries;
+              const cType = "{chart_type_js}";
+              if (cType === "Line") {{
+                mainSeries = chart.addLineSeries({{ color: "#38BDF8", lineWidth: 2, priceLineVisible: true }});
+                mainSeries.setData(candleData.map(c => ({{ time: c.time, value: c.close }})));
+              }} else if (cType === "Area") {{
+                mainSeries = chart.addAreaSeries({{ topColor: "rgba(56,189,248,0.4)", bottomColor: "rgba(56,189,248,0.02)", lineColor: "#38BDF8", lineWidth: 2 }});
+                mainSeries.setData(candleData.map(c => ({{ time: c.time, value: c.close }})));
+              }} else if (cType === "Bars") {{
+                mainSeries = chart.addBarSeries({{ upColor: "#16A34A", downColor: "#DC2626" }});
+                mainSeries.setData(candleData);
+              }} else {{
+                mainSeries = chart.addCandlestickSeries({{
+                  upColor: "#16A34A", downColor: "#DC2626",
+                  borderUpColor: "#16A34A", borderDownColor: "#DC2626",
+                  wickUpColor: "#16A34A", wickDownColor: "#DC2626",
+                  priceLineVisible: true
+                }});
+                mainSeries.setData(candleData);
+              }}
+
+              if ({price_line_js} > 0) {{
+                mainSeries.createPriceLine({{
+                  price: {price_line_js},
+                  color: "#F59E0B",
+                  lineWidth: 2,
+                  lineStyle: LightweightCharts.LineStyle.Dashed,
+                  axisLabelVisible: true,
+                  title: "Target"
+                }});
+              }}
 
               const volumeSeries = chart.addHistogramSeries({{
                 priceFormat: {{ type: "volume" }},
@@ -1785,6 +1828,32 @@ def render_main_market_dashboard():
                 }});
                 ema50.setData(calculateEMA(candleData, 50));
               }}
+
+              if ({sma20_enabled} && candleData.length >= 20) {{
+                const sma20 = chart.addLineSeries({{
+                  color: "#A855F7", lineWidth: 2, title: "SMA 20",
+                  priceLineVisible: false, lastValueVisible: true
+                }});
+                const smaData = [];
+                for (let i = 19; i < candleData.length; i++) {{
+                  let sum = 0;
+                  for (let j = i - 19; j <= i; j++) sum += candleData[j].close;
+                  smaData.push({{ time: candleData[i].time, value: sum / 20 }});
+                }}
+                sma20.setData(smaData);
+              }}
+
+              window.zoomChart = function(factor) {{
+                const ts = chart.timeScale();
+                const range = ts.getVisibleLogicalRange();
+                if (!range) return;
+                const center = (range.from + range.to) / 2;
+                const half = ((range.to - range.from) / 2) * factor;
+                ts.setVisibleLogicalRange({{ from: center - half, to: center + half }});
+              }};
+              window.resetChart = function() {{
+                chart.timeScale().fitContent();
+              }};
 
               chart.timeScale().fitContent();
               new ResizeObserver(entries => {{
