@@ -1733,7 +1733,8 @@ def render_main_market_dashboard():
                 layout: {{
                   background: {{ type: "solid", color: "#0F172A" }},
                   textColor: "#CBD5E1",
-                  fontFamily: "Arial, sans-serif"
+                  fontFamily: "Arial, sans-serif",
+                  attributionLogo: false
                 }},
                 grid: {{
                   vertLines: {{ color: "rgba(148,163,184,0.10)" }},
