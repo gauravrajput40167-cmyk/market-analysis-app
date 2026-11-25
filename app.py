@@ -398,9 +398,9 @@ hr {
 BINANCE_DATA_URL = "https://data-api.binance.vision"
 
 @st.cache_data(ttl=15, show_spinner=False)
-def get_binance_klines(symbol, interval="1m", limit=500):
+def get_binance_klines(symbol, interval="1m", limit=1000):
     """Fetch public Binance Spot OHLCV candles for the chart (read-only)."""
-    allowed_intervals = {"1m", "5m", "15m", "1h", "4h", "1d"}
+    allowed_intervals = {"1m", "5m", "15m", "1h", "4h", "1d", "1w", "1M"}
     if interval not in allowed_intervals:
         raise ValueError("Unsupported chart timeframe.")
     response = requests.get(
@@ -1652,7 +1652,7 @@ def render_main_market_dashboard():
     with chart_control_1:
         chart_interval = st.selectbox(
             "Timeframe",
-            ["1m", "5m", "15m", "1h", "4h", "1d"],
+            ["1m", "5m", "15m", "1h", "4h", "1d", "1w", "1M"],
             index=0,
             key="tv_chart_interval",
         )
@@ -1662,7 +1662,7 @@ def render_main_market_dashboard():
         show_ema50 = st.checkbox("Show EMA 50", value=False, key="tv_show_ema50")
 
     try:
-        chart_candles = get_binance_klines(symbol, chart_interval, 500)
+        chart_candles = get_binance_klines(symbol, chart_interval, 1000)
     except Exception as chart_error:
         chart_candles = []
         st.warning(f"Unable to load Binance candlesticks right now: {chart_error}")
