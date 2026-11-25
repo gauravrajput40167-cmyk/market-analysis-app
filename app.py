@@ -1392,6 +1392,32 @@ if current_role != "admin" and not is_sub_active:
         }};
         </script>
         """, height=700, scrolling=True)
+        _, ver_col, _ = st.columns([1, 2, 1])
+        with ver_col:
+            if st.button("✅ I Completed Payment — Verify & Unlock", use_container_width=True):
+                try:
+                    from payment_gateway import get_razorpay_client
+                    client = get_razorpay_client()
+                    order_payments = client.order.payments(pending_order["order_id"]).get("items", [])
+                    captured = [p for p in order_payments if str(p.get("status", "")).lower() == "captured"]
+                    if captured:
+                        pay_id = captured[0]["id"]
+                        import hmac, hashlib
+                        from payment_gateway import get_gateway_config
+                        sec = get_gateway_config()["key_secret"]
+                        sig = hmac.new(sec.encode("utf-8"), f"{pending_order['order_id']}|{pay_id}".encode("utf-8"), hashlib.sha256).hexdigest()
+                        res = verify_checkout_payment(current_user, pending_order["order_id"], pay_id, sig)
+                        if res.get("success"):
+                            st.session_state.pop("pending_rzp_order", None)
+                            st.success(res.get("message", "VIP Pass activated!"))
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(res.get("message", "Verification failed."))
+                    else:
+                        st.warning("Payment not captured yet on Razorpay. Please complete the payment first.")
+                except Exception as ver_err:
+                    st.error(f"Verification error: {ver_err}")
     st.stop()
 
 # =========================================================
