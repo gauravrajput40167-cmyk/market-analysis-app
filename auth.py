@@ -48,6 +48,77 @@ def verify_password(password: str, stored_password: str) -> bool:
 def validate_password(password: str) -> bool:
     """Validate password strength (minimum 8 characters)."""
     return isinstance(password, str) and len(password) >= 8
+
+DISPOSABLE_EMAIL_DOMAINS = {
+    "tempmail.com", "mailinator.com", "10minutemail.com", "guerrillamail.com",
+    "yopmail.com", "trashmail.com", "fakeinbox.com", "sharklasers.com",
+    "throwawaymail.com", "getnada.com", "dispostable.com", "maildrop.cc",
+    "temp-mail.org", "mohmal.com", "example.com", "test.com"
+}
+
+def is_valid_real_email(email: str) -> bool:
+    if not re.fullmatch(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", email):
+        return False
+    domain = email.split("@", 1)[1].lower()
+    if domain in DISPOSABLE_EMAIL_DOMAINS:
+        return False
+    return True
+
+def is_valid_real_mobile(mobile: str) -> bool:
+    digits = re.sub(r"\D", "", mobile)
+    if digits.startswith("91") and len(digits) == 12:
+        digits = digits[2:]
+    if len(digits) != 10:
+        return False
+    if digits[0] not in "6789":
+        return False
+    if len(set(digits)) <= 2:
+        return False
+    if digits in {"1234567890", "0123456789", "9876543210"}:
+        return False
+    return True
+
+def _ensure_sessions_table(connection):
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            session_token TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+def create_device_session(username: str, max_devices: int = 2):
+    token = secrets.token_hex(16)
+    with get_connection() as connection:
+        _ensure_sessions_table(connection)
+        rows = connection.execute(
+            "SELECT id FROM user_sessions WHERE username = ? ORDER BY id ASC",
+            (username,)
+        ).fetchall()
+        if len(rows) >= max_devices:
+            return None
+        connection.execute(
+            "INSERT INTO user_sessions (username, session_token) VALUES (?, ?)",
+            (username, token)
+        )
+        connection.commit()
+    return token
+
+def remove_device_session(username: str, token: str):
+    if not username or not token:
+        return
+    try:
+        with get_connection() as connection:
+            _ensure_sessions_table(connection)
+            connection.execute(
+                "DELETE FROM user_sessions WHERE username = ? AND session_token = ?",
+                (username, token)
+            )
+            connection.commit()
+    except Exception:
+        pass
+
 # =========================================================
 # DEMO USER & IN-MEMORY CACHE
 # =========================================================
@@ -209,9 +280,9 @@ def register_user(username, email, mobile, password):
     load_users_from_database()
     if username in USERS or username in USER_DATA:
         return False
-    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+    if not is_valid_real_email(email):
         return False
-    if not re.fullmatch(r"\+?[0-9]{10,15}", mobile):
+    if not is_valid_real_mobile(mobile):
         return False
     if not validate_password(password):
         return False
