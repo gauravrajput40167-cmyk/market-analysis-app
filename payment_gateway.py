@@ -313,6 +313,7 @@ def verify_checkout_payment(
     razorpay_payment_id: str,
     razorpay_signature: str,
     plan_id: str = DEFAULT_PLAN_ID,
+    extend: bool = False,
 ) -> dict:
     """Verify signature and provider state. VIP starts only after every check passes."""
     connection = None
@@ -417,7 +418,21 @@ def verify_checkout_payment(
 
         now_utc = datetime.now(timezone.utc)
         start_time_iso = now_utc.strftime("%Y-%m-%d %H:%M:%S")
-        expiry_time_iso = (now_utc + timedelta(days=duration_days)).strftime("%Y-%m-%d %H:%M:%S")
+        # Support pre-renewal: if extend=True and user has active subscription, add days on top
+        _base_time = now_utc
+        if extend:
+            try:
+                _cur_exp_row = connection.execute(
+                    "SELECT subscription_expires_at FROM users WHERE LOWER(TRIM(username)) = LOWER(TRIM(?))",
+                    (username,)
+                ).fetchone()
+                if _cur_exp_row and _cur_exp_row["subscription_expires_at"]:
+                    _cur_exp = datetime.strptime(_cur_exp_row["subscription_expires_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                    if _cur_exp > now_utc:
+                        _base_time = _cur_exp
+            except Exception:
+                pass  # fallback to now
+        expiry_time_iso = (_base_time + timedelta(days=duration_days)).strftime("%Y-%m-%d %H:%M:%S")
 
         current_payment = connection.execute(
             "SELECT payment_status, razorpay_payment_id FROM payments WHERE id = ?",

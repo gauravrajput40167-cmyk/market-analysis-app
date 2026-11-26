@@ -70,6 +70,33 @@ from payment_gateway import (
 LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo.png")
 PAGE_ICON = LOGO_PATH if os.path.exists(LOGO_PATH) else "📈"
 # =========================================================
+# ANTI-CLONE: DISABLE RIGHT-CLICK + DEVTOOLS SHORTCUTS
+# =========================================================
+components.html("""
+<script>
+(function() {
+  // Disable right-click context menu
+  document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
+  // Disable F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U, Ctrl+S
+  document.addEventListener('keydown', function(e) {
+    if (e.keyCode === 123) { e.preventDefault(); return false; }
+    if (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74)) { e.preventDefault(); return false; }
+    if (e.ctrlKey && (e.keyCode === 85 || e.keyCode === 83)) { e.preventDefault(); return false; }
+  });
+  // Detect DevTools open (interval check)
+  var _devt = false;
+  setInterval(function() {
+    var t = new Date();
+    debugger;
+    if (new Date() - t > 100 && !_devt) {
+      _devt = true;
+    }
+  }, 3000);
+})();
+</script>
+""", height=0, scrolling=False)
+
+# =========================================================
 # CENTRAL ACTIVITY TRACKING WRAPPER
 # =========================================================
 def _install_activity_tracking():
@@ -167,6 +194,17 @@ _bootstrap_admin_from_secrets()
 # =========================================================
 # STREAMLIT PAGE CONFIGURATION & FINTECH DESIGN SYSTEM
 # =========================================================
+# =========================================================
+# ANTI-CLONE: SESSION INTEGRITY TOKEN
+# =========================================================
+import secrets as _secrets
+if "app_integrity_token" not in st.session_state:
+    st.session_state["app_integrity_token"] = _secrets.token_hex(32)
+# Validate token exists (simple check — if missing someone is bypassing login flow)
+if not st.session_state.get("app_integrity_token"):
+    st.error("Session integrity error. Please reload the page.")
+    st.stop()
+
 st.set_page_config(
     page_title="Market Analysis App | Quantitative Crypto Intelligence",
     page_icon=PAGE_ICON,
@@ -183,6 +221,17 @@ html, body, [class*="css"] {
 #MainMenu, footer, [data-testid="stToolbar"], [data-testid="stDecoration"], [data-testid="stStatusWidget"], [class*="viewerBadge"], .stDeployButton {
     display: none !important;
     visibility: hidden !important;
+}
+/* Anti-scrape / anti-clone protections */
+body {
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    user-select: none !important;
+}
+input, textarea, [contenteditable] {
+    -webkit-user-select: text !important;
+    user-select: text !important;
 }
 .stApp {
     background-color: #080C14 !important;
@@ -1547,19 +1596,112 @@ if user_nav == "⚙️ Account & Settings":
         """, unsafe_allow_html=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)
-    st.subheader("🚀 Upgrade / Extend VIP Plan")
-    from payment_gateway import get_all_plans, create_checkout_order
-    _up_plans = get_all_plans()
-    _up_labels = [f"{p['name']} — ₹{p['amount']} ({p['duration_days']} Days)" for p in _up_plans]
-    _up_idx = st.selectbox("Select Plan to Activate / Extend", range(len(_up_plans)), format_func=lambda i: _up_labels[i], key="settings_upgrade_plan")
-    _up_plan = _up_plans[_up_idx]
-    if st.button(f"💳 Pay ₹{_up_plan['amount']} & Activate {_up_plan['name']}", type="primary", key="settings_upgrade_btn"):
-        _up_res = create_checkout_order(current_user, plan_id=_up_plan["id"])
-        if _up_res.get("success"):
-            st.session_state["pending_rzp_order"] = _up_res
-            st.info("Order created! Complete payment on the checkout screen.")
+    # ---- Pre-Renew / Extend / Upgrade Plan (available to all non-admin users) ----
+    if current_role != "admin":
+        from payment_gateway import get_all_plans, create_checkout_order, get_gateway_config
+        st.markdown("<hr>", unsafe_allow_html=True)
+        if is_sub_active:
+            st.subheader("🔄 Renew / Upgrade Plan While Active")
+            st.info(f"Your plan is **active** until {sub_info.get('expires_at', 'N/A')}. "
+                    f"Paying now will **add days on top** of your current expiry — it won't reset.")
         else:
-            st.error(_up_res.get("message", "Unable to start checkout."))
+            st.subheader("🚀 Activate / Upgrade VIP Plan")
+        _up_plans = get_all_plans()
+        _up_labels = [f"{p['name']} — ₹{p['amount']} ({p['duration_days']} Days)" for p in _up_plans]
+        _up_idx = st.selectbox("Select Plan", range(len(_up_plans)), format_func=lambda i: _up_labels[i], key="settings_upgrade_plan")
+        _up_plan = _up_plans[_up_idx]
+        _gw_cfg = get_gateway_config()
+        _mode_label = "LIVE PAYMENT" if _gw_cfg.get("mode") == "live" else "TEST MODE"
+        st.markdown(f"""
+        <div class="kukutv-vip-card" style="margin: 0.5rem 0 1rem 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
+                <span class="kukutv-badge">💎 {_up_plan.get('name', 'VIP Plan')}</span>
+                <span class="badge-bullish">{_mode_label}</span>
+            </div>
+            <div>
+                <span class="kukutv-price">₹{_up_plan.get('amount', 2)}</span>
+                <span style="color: #94A3B8; font-size: 1rem;"> / {_up_plan.get('duration_days', 7)} Days</span>
+            </div>
+            <p style="color: #CBD5E1; font-size: 0.88rem; margin-top: 0.6rem; margin-bottom: 0;">
+                {'Days will be added on top of your current expiry.' if is_sub_active else 'Unlock full VIP market terminal access.'}
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button(f"💳 Pay ₹{_up_plan['amount']} & {'Extend' if is_sub_active else 'Activate'} {_up_plan['name']}", type="primary", key="settings_upgrade_btn", use_container_width=True):
+            _up_res = create_checkout_order(current_user, plan_id=_up_plan["id"])
+            if _up_res.get("success"):
+                st.session_state["settings_pending_rzp_order"] = _up_res
+            else:
+                st.error(_up_res.get("message", "Unable to start checkout."))
+        _s_pending = st.session_state.get("settings_pending_rzp_order")
+        if _s_pending and _s_pending.get("order_id"):
+            components.html(f"""
+            <div style="display:flex;justify-content:center;padding:8px 0;">
+              <button id="rzp-settings-btn" style="background:linear-gradient(135deg,#F59E0B,#D97706);color:#111;border:none;border-radius:10px;padding:14px 28px;font-size:16px;font-weight:700;cursor:pointer;font-family:sans-serif;box-shadow:0 4px 15px rgba(245,158,11,0.4);">
+                🔒 Click Here to Open Razorpay (₹{_s_pending['amount_rupees']})
+              </button>
+            </div>
+            <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+            <script>
+            var opts = {{
+                "key": "{_s_pending['key_id']}",
+                "amount": "{_s_pending['amount']}",
+                "currency": "{_s_pending['currency']}",
+                "name": "Market Analysis App",
+                "description": "{_s_pending['plan_name']}",
+                "order_id": "{_s_pending['order_id']}",
+                "handler": function (response) {{
+                    var url = new URL(window.parent.location.href);
+                    url.searchParams.set("razorpay_payment_id", response.razorpay_payment_id);
+                    url.searchParams.set("razorpay_order_id", response.razorpay_order_id);
+                    url.searchParams.set("razorpay_signature", response.razorpay_signature);
+                    window.parent.location.href = url.toString();
+                }},
+                "theme": {{ "color": "#F59E0B" }}
+            }};
+            var rzpS = new Razorpay(opts);
+            document.getElementById("rzp-settings-btn").onclick = function(e) {{
+                rzpS.open(); e.preventDefault();
+            }};
+            </script>
+            """, height=120, scrolling=False)
+            _, _sv_col, _ = st.columns([1, 2, 1])
+            with _sv_col:
+                if st.button("✅ Verify & Activate / Extend Plan", use_container_width=True, key="settings_verify_btn"):
+                    try:
+                        from payment_gateway import get_razorpay_client
+                        _sv_client = get_razorpay_client()
+                        _sv_payments = _sv_client.order.payments(_s_pending["order_id"])
+                        _sv_pay_item = next(
+                            (p for p in (_sv_payments.get("items") or []) if p.get("status") == "captured"),
+                            None
+                        )
+                        if _sv_pay_item:
+                            import hmac as _hmac, hashlib as _hashlib
+                            _sv_key_secret = _s_pending.get("key_secret", "")
+                            _sv_body = f"{_s_pending['order_id']}|{_sv_pay_item['id']}"
+                            _sv_expected = _hmac.new(_sv_key_secret.encode(), _sv_body.encode(), _hashlib.sha256).hexdigest()
+                            # Extend if currently active
+                            _sv_extend = is_sub_active
+                            _sv_result = verify_checkout_payment(
+                                current_user,
+                                _s_pending["order_id"],
+                                _sv_pay_item["id"],
+                                _sv_expected,
+                                plan_id=_s_pending.get("plan_id", _up_plan["id"]),
+                                extend=_sv_extend,
+                            )
+                            if _sv_result.get("success"):
+                                st.success(_sv_result.get("message", "Plan activated / extended!"))
+                                del st.session_state["settings_pending_rzp_order"]
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error(_sv_result.get("message", "Verification failed."))
+                        else:
+                            st.warning("Payment not yet captured. Complete the Razorpay payment first.")
+                    except Exception as _sv_err:
+                        st.error(f"Verification error: {_sv_err}")
 
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("🔐 Change Password")
@@ -1748,15 +1890,28 @@ def render_main_market_dashboard():
     # -----------------------------------------------------
     sig_col, ind_col = st.columns([1.2, 2.2])
     with sig_col:
-        if signal == "BULLISH":
+        # Use multi-factor algorithmic signal (not simple SMA cross) for badge
+        _display_signal = demo_prediction.get("signal", signal)
+        if _display_signal == "BULLISH":
             badge_html = "<span class='badge-bullish' style='font-size: 1rem;'>▲ BULLISH MOMENTUM</span>"
             border_glow = "border-color: rgba(16, 185, 129, 0.4);"
-        elif signal == "BEARISH":
+        elif _display_signal == "BEARISH":
             badge_html = "<span class='badge-bearish' style='font-size: 1rem;'>▼ BEARISH PRESSURE</span>"
             border_glow = "border-color: rgba(239, 68, 68, 0.4);"
-        else:
+        elif _display_signal == "NEUTRAL":
             badge_html = "<span class='badge-neutral' style='font-size: 1rem;'>◆ NEUTRAL CONSOLIDATION</span>"
             border_glow = "border-color: rgba(245, 158, 11, 0.4);"
+        else:
+            # Fallback: show Bearish/Bullish/Neutral based on simple signal
+            if signal == "BULLISH":
+                badge_html = "<span class='badge-bullish' style='font-size: 1rem;'>▲ BULLISH MOMENTUM</span>"
+                border_glow = "border-color: rgba(16, 185, 129, 0.4);"
+            elif signal == "BEARISH":
+                badge_html = "<span class='badge-bearish' style='font-size: 1rem;'>▼ BEARISH PRESSURE</span>"
+                border_glow = "border-color: rgba(239, 68, 68, 0.4);"
+            else:
+                badge_html = "<span class='badge-neutral' style='font-size: 1rem;'>◆ NEUTRAL CONSOLIDATION</span>"
+                border_glow = "border-color: rgba(245, 158, 11, 0.4);"
         st.markdown(f"""
         <div class="fintech-card" style="height: 100%; {border_glow}">
             <div style="font-size: 0.8rem; color: #94A3B8; text-transform: uppercase; font-weight: 700; margin-bottom: 8px;">

@@ -483,14 +483,29 @@ def get_user_subscription_info(username: str) -> dict:
         "days_remaining": days_remaining,
         "status": status_label
     }
-def activate_subscription(username: str, plan_name: str = "Pro Monthly Plan", duration_days: int = 30):
-    """Activate subscription with start and expiry timestamps in SQLite and cache."""
+def activate_subscription(username: str, plan_name: str = "Pro Monthly Plan", duration_days: int = 30, extend: bool = False):
+    """Activate or extend subscription. If extend=True, days are added on top of existing expiry."""
     if not isinstance(username, str) or not username.strip():
         return False
     username = username.strip()
     now_utc = datetime.now(timezone.utc)
     start_time = now_utc.strftime("%Y-%m-%d %H:%M:%S")
-    expiry_time = (now_utc + timedelta(days=duration_days)).strftime("%Y-%m-%d %H:%M:%S")
+    # Determine base time: extend from current expiry if still active, else from now
+    base_time = now_utc
+    if extend:
+        try:
+            with get_connection() as _chk_conn:
+                _row = _chk_conn.execute(
+                    "SELECT subscription_expires_at FROM users WHERE username = ?", (username,)
+                ).fetchone()
+                if _row and _row["subscription_expires_at"]:
+                    _exp_str = _row["subscription_expires_at"]
+                    _exp_dt = datetime.strptime(_exp_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                    if _exp_dt > now_utc:
+                        base_time = _exp_dt  # extend from current expiry
+        except Exception:
+            pass  # fallback to now
+    expiry_time = (base_time + timedelta(days=duration_days)).strftime("%Y-%m-%d %H:%M:%S")
     with get_connection() as connection:
         cursor = connection.execute("""
             UPDATE users
@@ -507,8 +522,9 @@ def activate_subscription(username: str, plan_name: str = "Pro Monthly Plan", du
         USER_DATA[username]["subscription_plan"] = plan_name
         USER_DATA[username]["subscription_start"] = start_time
         USER_DATA[username]["subscription_expires_at"] = expiry_time
-    record_user_activity(username, "SUBSCRIPTION_ACTIVATED", f"Plan '{plan_name}' activated for {duration_days} days.")
-    record_security_event(username, "SUBSCRIPTION_ACTIVATED", f"Active until {expiry_time}.")
+    action = "SUBSCRIPTION_EXTENDED" if extend and base_time != now_utc else "SUBSCRIPTION_ACTIVATED"
+    record_user_activity(username, action, f"Plan '{plan_name}' {'extended' if extend else 'activated'} for {duration_days} days. Active until {expiry_time}.")
+    record_security_event(username, action, f"Active until {expiry_time}.")
     return True
 def deactivate_subscription(username: str):
     """Deactivate subscription for user in SQLite and update cache."""

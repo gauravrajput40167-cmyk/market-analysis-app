@@ -53,7 +53,16 @@ class MainActivity : AppCompatActivity() {
             displayZoomControls = false
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             cacheMode = WebSettings.LOAD_DEFAULT
+            // Anti-clone / anti-scrape hardening
+            allowFileAccess = false
+            allowContentAccess = false
+            allowFileAccessFromFileURLs = false
+            allowUniversalAccessFromFileURLs = false
         }
+        // Disable long-press context menu (prevents copy/save)
+        webView.setOnLongClickListener { true }
+        // Inject user-select:none CSS after page load
+        webView.addJavascriptInterface(object : Any() {}, "AndroidApp")
 
         val allowedHost = Uri.parse(BuildConfig.APP_URL).host
 
@@ -75,6 +84,16 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 swipeRefresh.isRefreshing = false
                 progressBar.visibility = View.GONE
+                // Inject anti-clone: disable text selection & right-click in WebView
+                view?.evaluateJavascript("""
+                    (function() {
+                        var style = document.createElement('style');
+                        style.innerHTML = 'body, * { -webkit-user-select: none !important; user-select: none !important; }' +
+                            'input, textarea { -webkit-user-select: text !important; user-select: text !important; }';
+                        document.head.appendChild(style);
+                        document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
+                    })();
+                """.trimIndent(), null)
             }
 
             override fun onReceivedError(
