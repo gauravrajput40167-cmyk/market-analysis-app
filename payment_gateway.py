@@ -41,7 +41,17 @@ PLAN_PRICE_RUPEES = 2
 PLAN_PRICE_PAISE = 200
 PLAN_DURATION_DAYS = 5
 CURRENCY = "INR"
-DEFAULT_PLAN_ID = "vip_pass"
+DEFAULT_PLAN_ID = "week_1"
+
+SUBSCRIPTION_PLANS = {
+    "week_1": {"id": "week_1", "name": "1 Week VIP Pass", "amount": 2, "amount_paise": 200, "duration_days": 7, "original_price": 49, "currency": "INR"},
+    "week_2": {"id": "week_2", "name": "2 Weeks VIP Pass", "amount": 10, "amount_paise": 1000, "duration_days": 14, "original_price": 99, "currency": "INR"},
+    "month_1": {"id": "month_1", "name": "1 Month VIP Pass", "amount": 50, "amount_paise": 5000, "duration_days": 30, "original_price": 199, "currency": "INR"},
+    "year_1": {"id": "year_1", "name": "1 Year VIP Pass", "amount": 500, "amount_paise": 50000, "duration_days": 365, "original_price": 1999, "currency": "INR"},
+}
+def get_all_plans():
+    return list(SUBSCRIPTION_PLANS.values())
+
 
 
 def _read_setting(key):
@@ -107,33 +117,7 @@ def get_gateway_config():
 
 
 def get_single_plan(plan_id=DEFAULT_PLAN_ID):
-    """Return the server-controlled plan. Client prices are ignored."""
-    initialize_database()
-    connection = get_connection()
-    try:
-        row = connection.execute(
-            """
-            SELECT plan_id, name, amount_rupees, duration_days, currency, active, description
-            FROM subscription_plans
-            WHERE plan_id = ?
-            """,
-            (plan_id,),
-        ).fetchone()
-    finally:
-        connection.close()
-    if row and int(row["active"] or 0) == 1:
-        amount = Decimal(str(row["amount_rupees"])).quantize(Decimal("0.01"))
-        paise = int(amount * 100)
-        return {
-            "id": row["plan_id"],
-            "name": row["name"],
-            "amount": amount,
-            "amount_paise": paise,
-            "duration_days": int(row["duration_days"]),
-            "currency": (row["currency"] or CURRENCY).upper(),
-            "mode": get_gateway_config()["mode"],
-            "description": row["description"] or "",
-        }
+    return dict(SUBSCRIPTION_PLANS.get(plan_id, SUBSCRIPTION_PLANS[DEFAULT_PLAN_ID]))
     if plan_id != DEFAULT_PLAN_ID:
         raise ValueError("That subscription plan is not available.")
     return {

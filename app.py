@@ -1364,7 +1364,7 @@ if current_role != "admin" and not is_sub_active:
     _, btn_col, _ = st.columns([1, 2, 1])
     with btn_col:
         if st.button(f"💳 Pay ₹{plan['amount']} & Unlock VIP Pass", type="primary", use_container_width=True):
-            order_res = create_checkout_order(current_user)
+            order_res = create_checkout_order(current_user, plan_id=plan["id"])
             if order_res.get("success"):
                 st.session_state["pending_rzp_order"] = order_res
             else:
@@ -1417,7 +1417,7 @@ if current_role != "admin" and not is_sub_active:
                         from payment_gateway import get_gateway_config
                         sec = get_gateway_config()["key_secret"]
                         sig = hmac.new(sec.encode("utf-8"), f"{pending_order['order_id']}|{pay_id}".encode("utf-8"), hashlib.sha256).hexdigest()
-                        res = verify_checkout_payment(current_user, pending_order["order_id"], pay_id, sig)
+                        res = verify_checkout_payment(current_user, pending_order["order_id"], pay_id, sig, plan_id=pending_order.get("plan_id", "week_1"))
                         if res.get("success"):
                             st.session_state.pop("pending_rzp_order", None)
                             st.success(res.get("message", "VIP Pass activated!"))
