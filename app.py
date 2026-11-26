@@ -590,7 +590,7 @@ if not st.session_state.logged_in:
         st.markdown("""
         <div style="margin-bottom: 0.5rem;">
             <h1 style="margin: 0; font-size: 2rem;">Market Analysis App</h1>
-            <p style="color: #94A3B8; font-size: 0.95rem;">Institutional Market Intelligence & Quantitative Analytics</p>
+            <p style="color: #94A3B8; font-size: 0.95rem;">Educational Technical Charting &amp; Market Data Analytics Software</p>
         </div>
         """, unsafe_allow_html=True)
     with col_stat:
@@ -667,7 +667,18 @@ if not st.session_state.logged_in:
     with f_col2:
         st.markdown("<div style='font-size: 0.85rem; color: #94A3B8;'><b style='color: #F8FAFC;'>🔒 Payments:</b> Razorpay checkout. Live payouts stay off until authorized.</div>", unsafe_allow_html=True)
     with f_col3:
-        st.markdown("<div style='font-size: 0.85rem; color: #94A3B8;'><b style='color: #F8FAFC;'>🚀 Quantitative AI Engine:</b> Multi-factor momentum scoring.</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size: 0.85rem; color: #94A3B8;'><b style='color: #F8FAFC;'>📊 Technical Indicators:</b> SMA, EMA, RSI &amp; MACD learning tools.</div>", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    p_tab1, p_tab2, p_tab3, p_tab4 = st.tabs(["🔒 Privacy Policy", "📜 Terms & Conditions", "💸 Refund Policy", "📞 Contact Us"])
+    with p_tab1:
+        st.caption("**Privacy Policy:** Market Analysis App collects only your username, email, and mobile number for account authentication and subscription management. We do not sell or share personal data with third parties. All passwords are encrypted using PBKDF2-HMAC-SHA256.")
+    with p_tab2:
+        st.caption("**Terms & Conditions:** Market Analysis App is an educational data visualization and technical charting software. It does not offer financial advice, brokerage, or real-money trading services. By using this platform, you agree to use the analytics strictly for educational purposes.")
+    with p_tab3:
+        st.caption("**Refund & Cancellation Policy:** Subscription passes (e.g., 5-Day VIP Educational Pass) grant immediate digital access to charting tools. Cancellations stop future renewals. For duplicate charges or technical billing issues, contact support within 7 days for a full refund.")
+    with p_tab4:
+        st.caption("**Contact Us:** Developer / Support: Gaurav Rajput | Email: gauravrajput40167@gmail.com | Response time: 24–48 business hours.")
     st.stop()
 # =========================================================
 # SIDEBAR - ACCOUNT, TELEMETRY & SUBSCRIPTION MONITOR
