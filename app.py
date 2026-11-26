@@ -179,6 +179,11 @@ st.markdown("""
 html, body, [class*="css"] {
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
 }
+
+#MainMenu, footer, [data-testid="stToolbar"], [data-testid="stDecoration"], [data-testid="stStatusWidget"], [class*="viewerBadge"], .stDeployButton {
+    display: none !important;
+    visibility: hidden !important;
+}
 .stApp {
     background-color: #080C14 !important;
     color: #E2E8F0 !important;
