@@ -1547,6 +1547,21 @@ if user_nav == "⚙️ Account & Settings":
         """, unsafe_allow_html=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)
+    st.subheader("🚀 Upgrade / Extend VIP Plan")
+    from payment_gateway import get_all_plans, create_checkout_order
+    _up_plans = get_all_plans()
+    _up_labels = [f"{p['name']} — ₹{p['amount']} ({p['duration_days']} Days)" for p in _up_plans]
+    _up_idx = st.selectbox("Select Plan to Activate / Extend", range(len(_up_plans)), format_func=lambda i: _up_labels[i], key="settings_upgrade_plan")
+    _up_plan = _up_plans[_up_idx]
+    if st.button(f"💳 Pay ₹{_up_plan['amount']} & Activate {_up_plan['name']}", type="primary", key="settings_upgrade_btn"):
+        _up_res = create_checkout_order(current_user, plan_id=_up_plan["id"])
+        if _up_res.get("success"):
+            st.session_state["pending_rzp_order"] = _up_res
+            st.info("Order created! Complete payment on the checkout screen.")
+        else:
+            st.error(_up_res.get("message", "Unable to start checkout."))
+
+    st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("🔐 Change Password")
     with st.form("change_password_form"):
         cur_pw = st.text_input("Current Password", type="password")
