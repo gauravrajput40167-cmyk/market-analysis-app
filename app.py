@@ -1338,8 +1338,15 @@ if _rzp_order_id and _rzp_payment_id and _rzp_signature:
         st.error(_verify_res.get("message", "Payment verification failed."))
 
 if current_role != "admin" and not is_sub_active:
-    from payment_gateway import create_checkout_order, get_single_plan, get_gateway_config
-    plan = get_single_plan()
+    from payment_gateway import create_checkout_order, get_single_plan, get_all_plans, get_gateway_config
+    is_expired_user = sub_info.get("status") == "Expired" or sub_info.get("plan") in {"Expired", "Cancelled"}
+    if is_expired_user:
+        all_plans = get_all_plans()
+        plan_labels = [f"{p['name']} — ₹{p['amount']} ({p['duration_days']} Days)" for p in all_plans]
+        chosen_idx = st.selectbox("Choose Your Renewal Plan", range(len(all_plans)), format_func=lambda i: plan_labels[i], key="vip_plan_selector")
+        plan = all_plans[chosen_idx]
+    else:
+        plan = get_single_plan("week_1")
     gw_cfg = get_gateway_config()
     mode_label = "LIVE PAYMENT" if gw_cfg.get("mode") == "live" else "TEST MODE"
 
